@@ -1,19 +1,18 @@
 /** Functionality related to chatting. */
 
 // Room is an abstraction of a chat channel
-const Room = require("./Room");
-
+const Room = require('./Room');
+const axios = require('axios');
 
 /** ChatUser is a individual connection from client -> server to chat. */
 
 class ChatUser {
-
   /** make chat: store connection-device, rooom */
 
   constructor(send, roomName) {
-    this._send = send;               // "send" function for this user
-    this.room = Room.get(roomName);  // room user will be in
-    this.name = null;                // becomes the username of the visitor
+    this._send = send; // "send" function for this user
+    this.room = Room.get(roomName); // room user will be in
+    this.name = null; // becomes the username of the visitor
 
     console.log(`created chat in ${this.room.name}`);
   }
@@ -22,7 +21,7 @@ class ChatUser {
 
   send(data) {
     try {
-      this._send(data)
+      this._send(data);
     } catch {
       // If trying to send to a user fails, ignore it
     }
@@ -34,8 +33,8 @@ class ChatUser {
     this.name = name;
     this.room.join(this);
     this.room.broadcast({
-      type: "note",
-      text: `${this.name} joined "${this.room.name}".`,
+      type: 'note',
+      text: `${this.name} joined "${this.room.name}".`
     });
   }
 
@@ -44,8 +43,8 @@ class ChatUser {
   handleChat(text) {
     this.room.broadcast({
       name: this.name,
-      type: "chat",
-      text: text,
+      type: 'chat',
+      text: text
     });
   }
 
@@ -55,12 +54,18 @@ class ChatUser {
    * - {type: "chat", text: msg }     : chat
    */
 
-  handleMessage(jsonData) {
+  async handleMessage(jsonData) {
     let msg = JSON.parse(jsonData);
-
-    if (msg.type === "join") this.handleJoin(msg.name);
-    else if (msg.type === "chat") this.handleChat(msg.text);
-    else throw new Error(`bad message: ${msg.type}`);
+    console.log('msg ', msg);
+    if (msg.type === 'join') {
+      this.handleJoin(msg.name);
+    } else if (msg.type === 'chat') {
+      this.handleChat(msg.text);
+    } else if (msg.type === 'joke') {
+      this.handleJoke(await this.makeJokeRequest());
+    } else {
+      throw new Error(`bad message: ${msg.type}`);
+    }
   }
 
   /** Connection was closed: leave room, announce exit to others */
@@ -68,11 +73,29 @@ class ChatUser {
   handleClose() {
     this.room.leave(this);
     this.room.broadcast({
-      type: "note",
-      text: `${this.name} left ${this.room.name}.`,
+      type: 'note',
+      text: `${this.name} left ${this.room.name}.`
     });
   }
-}
 
+  async makeJokeRequest() {
+    let response = await axios.get('https://icanhazdadjoke.com/', {
+      headers: { accept: 'application/json' }
+    });
+    return response.data.joke;
+  }
+
+  async handleJoke(joke) {
+    this.display({
+      name: this.name,
+      type: 'chat',
+      text: joke
+    });
+  }
+
+  display(data) {
+    this.send(JSON.stringify(data));
+  }
+}
 
 module.exports = ChatUser;
